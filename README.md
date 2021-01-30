@@ -31,7 +31,8 @@ PUT ej_1
 
 ```
 Luego de hacer el bulk upload de la info de g20 podemos ver que la query:
-```javascrip
+
+```javascript
 GET /ej_1/_search
 {"_source":["text"],
   "query":
@@ -42,6 +43,7 @@ GET /ej_1/_search
     }
 }
 ```
+
 devuelve 441 resultados. Mientras que la query
 ```javascript
 GET /ej_1/_search
