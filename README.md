@@ -66,13 +66,137 @@ devuelve 20. Y si quereeamos con "PRESIDENT" obtenemos 4.
 Esto nos refiere al stemming que tiene en cuenta elasticsearch dentro de sus token filters, [como nos indica la documentación](https://www.elastic.co/guide/en/elasticsearch/reference/current/stemming.html).
 
 Para esto no parece que pudiéramos especificar el tokenizer en un query específico, sino que hay que hacer un analyzer custom.
-[Por ej acá en stack overflow](https://stackoverflow.com/questions/32229255/elasticsearch-match-with-stemming)
+[Por ej acá en stack overflow](https://stackoverflow.com/questions/32103886/match-query-internals-on-stemmed-word-search-elastic)
 
 Una vez creado, hay que tener cuidado con cómo se busca. Se debe buscar con una match query para que primero se busque en el output que se obtiene usando el analizador custom, [explicado con ejemplos acá](https://stackoverflow.com/questions/32103886/match-query-internals-on-stemmed-word-search-elastic)
 
 
+```javascript
+PUT ej_2
+{
+   "settings": {
+      "analysis": {
+         "analyzer": {
+            "stemmer_analyzer": {
+                "type":"custom",
+               "tokenizer": "whitespace",
+               "filter": [
+                  "my_stemmer"
+               ]
+            }
+         },
+         "filter": {
+            "my_stemmer": {
+               "type": "stemmer",
+               "name": "english"
+            }
+         }
+      }
+   }
+}
 
+PUT ej_2/_mapping
+{
+     "properties": {
+        "text": {
+           "type": "text",
+           "analyzer": "stemmer_analyzer"
+        }
+     }
+}
+```
+Luego la query
 
+```javascript
+GET /ej_2/_search
+{"_source":["text"],
+  "query": {
+    
+    "bool": {
+      "must": 
+        { "match": { "text": "pray" } }
+      
+    }
+  }
+}
+```
+Nos da el resultado pedido. Esto se puede ver más en detalle comparando los outputs de 
+```javascript
+GET /ej_2/_analyze
+{
+  "field": "text",
+  "text": "praying prays pray"
+}
+```
+
+vs la misma query en otra colección indexada de forma standard (sin stemming)
+
+```javascript
+GET /g20/_analyze
+{
+  "field": "text",
+  "text": "praying prays pray"
+}
+```
+
+vemos los tokens que generó el primero son
+```javascript
+{
+  "tokens" : [
+    {
+      "token" : "prai",
+      "start_offset" : 0,
+      "end_offset" : 7,
+      "type" : "word",
+      "position" : 0
+    },
+    {
+      "token" : "prai",
+      "start_offset" : 8,
+      "end_offset" : 13,
+      "type" : "word",
+      "position" : 1
+    },
+    {
+      "token" : "prai",
+      "start_offset" : 14,
+      "end_offset" : 18,
+      "type" : "word",
+      "position" : 2
+    }
+  ]
+}
+```
+
+vs
+
+```javascript
+{
+  "tokens" : [
+    {
+      "token" : "praying",
+      "start_offset" : 0,
+      "end_offset" : 7,
+      "type" : "<ALPHANUM>",
+      "position" : 0
+    },
+    {
+      "token" : "prays",
+      "start_offset" : 8,
+      "end_offset" : 13,
+      "type" : "<ALPHANUM>",
+      "position" : 1
+    },
+    {
+      "token" : "pray",
+      "start_offset" : 14,
+      "end_offset" : 18,
+      "type" : "<ALPHANUM>",
+      "position" : 2
+    }
+  ]
+}
+```
 
 # ej 3
 Vemos que estas siguientes queries nos traen resultados no deseados:
