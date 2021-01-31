@@ -111,16 +111,14 @@ Luego la query
 GET /ej_2/_search
 {"_source":["text"],
   "query": {
-    
     "bool": {
-      "must": 
+      "must":
         { "match": { "text": "pray" } }
-      
     }
   }
 }
 ```
-Nos da el resultado pedido. Esto se puede ver más en detalle comparando los outputs de 
+Nos da el resultado pedido. Esto se puede ver más en detalle comparando los outputs de
 ```javascript
 GET /ej_2/_analyze
 {
@@ -199,6 +197,8 @@ vs
 ```
 
 # ej 3
+> En este ejercicio se pide una forma de buscar matches exactos en campos de tipo texto, específicamente en el campo user.location
+
 Vemos que estas siguientes queries nos traen resultados no deseados:
 
 ```javascript
@@ -228,7 +228,7 @@ GET /g20/_search
 }
 
 ```
-103 resultados, entre ellos "new york new york", etc. pasa lo mismo si reemplazamos "york" con "california", y obtenemos 147 resultados.
+> 103 resultados, entre ellos "new york new york", etc. pasa lo mismo si reemplazamos "york" con "california", y obtenemos 147 resultados.
 
 
 En cambio con estas queries:
@@ -252,3 +252,61 @@ GET /g20/_search
 ```
 
 obtenemos 5 valores, que constituyen matches exactos (incluso en capitalización).
+Esto se refiere al hecho de que elasticsearch al indexar campos de tipo texto, crea un subcampo "keyword" de forma automática (de tipo keyword), lo que nos deja hacer búsquedas exactas en term queries accediendo de la forma ```<field_name>.keyword```.
+
+
+# ej 4
+> En este ejercicio se pide consultar un campo por rangos de valores.
+
+Este campo es una fecha, pero por defecto elasticsearch lo indexó como tipo texto
+
+```javascript
+GET /g20/_search
+{"_source":["user.created_at"],
+    "query": { "match_all": {} }
+
+}
+```
+un ejemplo de un hit
+```javascript
+{
+        "_index" : "g20",
+        "_type" : "_doc",
+        "_id" : "1059862694315069440",
+        "_score" : 1.0,
+        "_source" : {
+          "user" : {
+            "created_at" : "Sun Aug 14 18:38:13 +0000 2011"
+          }
+        }
+      }
+```
+
+podemos inspeccionar los mappings y tipos de este campo con el comando
+
+```javascript
+GET g20/_mapping/field/user.created_at
+
+
+{
+  "g20" : {
+    "mappings" : {
+      "user.created_at" : {
+        "full_name" : "user.created_at",
+        "mapping" : {
+          "created_at" : {
+            "type" : "text",
+            "fields" : {
+              "keyword" : {
+                "type" : "keyword",
+                "ignore_above" : 256
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+para poder explotar las posibilidades de agregaciones con fechas hay que remappear este campo para que sea de [tipo date](https://www.elastic.co/guide/en/elasticsearch/reference/current/date.html).
