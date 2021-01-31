@@ -310,3 +310,74 @@ GET g20/_mapping/field/user.created_at
 }
 ```
 para poder explotar las posibilidades de agregaciones con fechas hay que remappear este campo para que sea de [tipo date](https://www.elastic.co/guide/en/elasticsearch/reference/current/date.html).
+
+
+Vemos que [tiene el formato](https://stackoverflow.com/questions/63536502/elasticsearch-failed-to-parse-date-field)
+
+> Sun Aug 14 18:38:13 +0000 2011
+> EEE MMM dd HH:mm:ss Z yyyy
+
+por lo que defino el mapping
+
+```javascript
+PUT ej_4
+{
+  "mappings": {
+    "properties": {
+      "user.created_at": {
+        "type":   "date",
+        "format": "EEE MMM dd HH:mm:ss Z yyyy"
+      }
+    }
+  }
+}
+```
+
+Luego puedo hacer queries de la forma:
+
+```javascript
+GET /ej_4/_search
+{"_source": "user.created_at", 
+ "query": { 
+    "bool": { 
+      "must": { "match_all": {} }, 
+      "filter": { 
+        "range": { 
+          "user.created_at": { 
+            "gte": "Sun Aug 14 18:38:13 +0000 2011"
+            } } } } } }
+```
+
+es decir, filtrar por los usuarios que ingresaron el día o después del día 14/8/2011, y obtengo 7231 resultados, por ej:
+```javascript
+{
+        "_index" : "ej_4",
+        "_type" : "_doc",
+        "_id" : "1059862698010271744",
+        "_score" : 1.0,
+        "_source" : {
+          "user" : {
+            "created_at" : "Sun Nov 29 08:33:40 +0000 2015"
+          }
+        }
+      }
+```
+
+mientras que moviendo la fecha una semana (21/8/2011) obtengo 7200 resultados, por ej:
+
+```javascript
+{
+        "_index" : "ej_4",
+        "_type" : "_doc",
+        "_id" : "1059862694931693571",
+        "_score" : 1.0,
+        "_source" : {
+          "user" : {
+            "created_at" : "Wed Dec 10 08:30:08 +0000 2014"
+          }
+        }
+      }
+```
+
+
+# ej 5
