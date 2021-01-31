@@ -381,3 +381,282 @@ mientras que moviendo la fecha una semana (21/8/2011) obtengo 7200 resultados, p
 
 
 # ej 5
+
+> En este ejercicio nos piden buscar por el campo place.bounding_box, usando coordenadas.
+
+No todos los registros del dataset tienen este campo, así que primero hay que filtrar aquellos que si lo tienen - 154 de los 9567 registros tienen este campo, como lo evidencia la query correspondiente:
+
+```javascript
+GET g20/_search
+{"_source":["place.bounding_box.coordinates"],
+ "query": {
+    "bool": {
+      "filter": {
+        "exists": {
+          "field": "place.bounding_box.coordinates"
+        }
+      }}}}
+
+...
+
+"hits" : {
+    "total" : {
+      "value" : 154,
+      "relation" : "eq"
+    },
+
+```
+
+
+y uno de estos hits se ve da la siguiente forma:
+
+```javascript
+{
+        "_index" : "g20",
+        "_type" : "_doc",
+        "_id" : "1059862707782987777",
+        "_score" : 0.0,
+        "_source" : {
+          "place" : {
+            "bounding_box" : {
+              "coordinates" : [
+                [
+                  [
+                    72.74484,
+                    18.845343
+                  ],
+                  [
+                    72.74484,
+                    19.502937
+                  ],
+                  [
+                    73.003648,
+                    19.502937
+                  ],
+                  [
+                    73.003648,
+                    18.845343
+                  ]
+                ]
+              ]
+            }
+          }
+        }
+      }
+```
+que tiene sentido, serían los 4 puntos de la caja que delimita la zona geográfica.
+Esto nos refiere a un tipo de dato específico que elasticsearch soporta: el [Geo bounding box](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-geo-bounding-box-query.html), al cual se le pueden hacer queries complejas igual que al tipo de dato Date.
+Vemos que por defecto, este campo fue indexado por elasticsearch como float:
+
+```javascript
+GET /g20/_mapping/field/place.bounding_box.coordinates
+
+{
+  "g20" : {
+    "mappings" : {
+      "place.bounding_box.coordinates" : {
+        "full_name" : "place.bounding_box.coordinates",
+        "mapping" : {
+          "coordinates" : {
+            "type" : "float"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Por lo que habría que establecer un mapping a geo_shape, ya que es un quadtree: cuatro geo_points que delimitan una shape geométrica.
+
+Se lo indexa haciendo:
+
+
+El coerce se setteó a true porque sino al cargar los datos daba el siguiente error:
+```javascript
+"error": {
+                    "type": "mapper_parsing_exception",
+                    "reason": "failed to parse field [place.bounding_box] of type [geo_shape]",
+                    "caused_by": {
+                        "type": "x_content_parse_exception",
+                        "reason": "Failed to build [geojson] after last required field arrived",
+                        "caused_by": {
+                            "type": "illegal_argument_exception",
+                            "reason": "first and last points of the linear ring must be the same (it must close itself): x[0]=72.74484 x[3]=73.003648 y[0]=18.845343 y[3]=18.845343"
+                        }
+                    }
+```
+> Pareciera ser que hay errores en los datos originales.
+
+ahora al buscar 
+```javascript
+GET ej_5/_search
+{"_source":["place.bounding_box.coordinates"],
+ "query": {
+    "bool": {
+      "filter": {
+        "exists": {
+          "field": "place.bounding_box"
+        }
+      }}}}
+```
+obtenemos los 149 tweets que tienen esa información, que aparecen en el mapping original.
+
+Una vez indexado podemos hacer este tipo de queries:
+```javascript
+GET ej_5/_search
+{"query": {
+    "bool": {
+      "must": {
+        "match_all": {}
+      },
+      "filter": {
+        "geo_shape": {
+          "place.bounding_box": {
+            "shape": {
+              "type": "polygon",
+              "coordinates": [[[-122.6735372003,40.1846173338],[-103.1789051946,40.1846173338],[-103.1789051946,48.2617420987],[-122.6735372003,48.2617420987],[-122.6735372003,40.1846173338]]]
+            },
+            "relation": "within"
+          }
+        }
+      }
+    }
+  }
+}
+```
+ie buscar aquellos tweets que fueron tweeteados dentro de  esta región en el mapa [fuente](https://boundingbox.klokantech.com/):
+<img src="https://i.imgur.com/RlkiUwb.png">
+
+
+Nos da 16 resultados, por ej:
+
+```javascript
+      {
+        "_index" : "ej_5",
+        "_type" : "_doc",
+        "_id" : "1059863923183124481",
+        "_score" : 1.0,
+        "_source" : {
+          "quote_count" : 0,
+          "contributors" : null,
+          "truncated" : false,
+          "text" : "@realDonaldTrump If you're against the Mexican Caravan, you are for the Mexican Drug Cartels",
+          "is_quote_status" : false,
+          "in_reply_to_status_id" : 1059469158830796800,
+          "reply_count" : 0,
+          "id" : 1059863923183124481,
+          "favorite_count" : 0,
+          "entities" : {
+            "user_mentions" : [
+              {
+                "id" : 25073877,
+                "indices" : [
+                  0,
+                  16
+                ],
+                "id_str" : "25073877",
+                "screen_name" : "realDonaldTrump",
+                "name" : "Donald J. Trump"
+              }
+            ],
+            "symbols" : [ ],
+            "hashtags" : [ ],
+            "urls" : [ ]
+          },
+          "retweeted" : false,
+          "coordinates" : null,
+          "timestamp_ms" : "1541526225263",
+          "source" : """<a href="http://twitter.com/download/android" rel="nofollow">Twitter for Android</a>""",
+          "in_reply_to_screen_name" : "realDonaldTrump",
+          "id_str" : "1059863923183124481",
+          "display_text_range" : [
+            17,
+            92
+          ],
+          "retweet_count" : 0,
+          "in_reply_to_user_id" : 25073877,
+          "favorited" : false,
+          "user" : {
+            "follow_request_sent" : null,
+            "profile_use_background_image" : true,
+            "default_profile_image" : false,
+            "id" : 55642438,
+            "default_profile" : false,
+            "verified" : false,
+            "profile_image_url_https" : "https://pbs.twimg.com/profile_images/831171445560455168/SW2pNTrE_normal.jpg",
+            "profile_sidebar_fill_color" : "252429",
+            "profile_text_color" : "666666",
+            "followers_count" : 527,
+            "profile_sidebar_border_color" : "181A1E",
+            "id_str" : "55642438",
+            "profile_background_color" : "1A1B1F",
+            "listed_count" : 4,
+            "profile_background_image_url_https" : "https://abs.twimg.com/images/themes/theme9/bg.gif",
+            "utc_offset" : null,
+            "statuses_count" : 6169,
+            "description" : "It's scary how people are fooled by inconsistent propaganda.  Let's Educate and #resist the insanity. #Resistance",
+            "friends_count" : 1447,
+            "location" : "Earth",
+            "profile_link_color" : "2FC2EF",
+            "profile_image_url" : "http://pbs.twimg.com/profile_images/831171445560455168/SW2pNTrE_normal.jpg",
+            "following" : null,
+            "geo_enabled" : true,
+            "profile_banner_url" : "https://pbs.twimg.com/profile_banners/55642438/1519508860",
+            "profile_background_image_url" : "http://abs.twimg.com/images/themes/theme9/bg.gif",
+            "name" : "Jason Nebenfuhr",
+            "lang" : "en",
+            "profile_background_tile" : false,
+            "favourites_count" : 12332,
+            "screen_name" : "the_Neb",
+            "notifications" : null,
+            "url" : null,
+            "created_at" : "Fri Jul 10 19:26:18 +0000 2009",
+            "contributors_enabled" : false,
+            "time_zone" : null,
+            "protected" : false,
+            "translator_type" : "none",
+            "is_translator" : false
+          },
+          "geo" : null,
+          "in_reply_to_user_id_str" : "25073877",
+          "lang" : "en",
+          "created_at" : "Tue Nov 06 17:43:45 +0000 2018",
+          "filter_level" : "low",
+          "in_reply_to_status_id_str" : "1059469158830796800",
+          "place" : {
+            "country_code" : "US",
+            "url" : "https://api.twitter.com/1.1/geo/id/8d71376556a9e531.json",
+            "country" : "United States",
+            "place_type" : "city",
+            "bounding_box" : {
+              "type" : "Polygon",
+              "coordinates" : [
+                [
+                  [
+                    -122.309297,
+                    47.343399
+                  ],
+                  [
+                    -122.309297,
+                    47.441224
+                  ],
+                  [
+                    -122.126854,
+                    47.441224
+                  ],
+                  [
+                    -122.126854,
+                    47.343399
+                  ]
+                ]
+              ]
+            },
+            "full_name" : "Kent, WA",
+            "attributes" : { },
+            "id" : "8d71376556a9e531",
+            "name" : "Kent"
+          }
+        }
+      },
+```
